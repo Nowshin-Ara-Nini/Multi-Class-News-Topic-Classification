@@ -15,7 +15,6 @@ torchinfo>=1.8.0
 
 # --- NLP ---
 nltk>=3.8.0
-gensim>=4.3.0
 
 # --- Visualization ---
 matplotlib>=3.7.0

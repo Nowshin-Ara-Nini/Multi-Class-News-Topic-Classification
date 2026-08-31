@@ -55,6 +55,10 @@ checkpoints/
 *.onnx
 *.joblib
 
+# Compact, cache-free checkpoint included with the Streamlit deployment.
+!app/model/
+!app/model/**
+
 # Word2Vec / Gensim models
 *.model
 *.model.wv.vectors_ngrams.npy

@@ -17,6 +17,8 @@ from pathlib import Path
 # Add project root to path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+DEPLOYED_MODEL_DIR = Path(__file__).resolve().parent / "model"
+DEPLOYED_MODEL_NAME = "TF-IDF Logistic Regression"
 
 import streamlit as st
 import plotly.express as px
@@ -294,28 +296,30 @@ def main():
     with st.sidebar:
         st.markdown("### ⚙️ Settings")
 
-        # Model selection
-        saved_models_dir = PROJECT_ROOT / "saved_models"
-        available_models = []
-        if saved_models_dir.exists():
-            available_models = [
-                d.name for d in saved_models_dir.iterdir()
-                if d.is_dir()
-                and ((d / "model.pt").exists() or (d / "model.joblib").exists())
-                and (d / "pipeline_config.json").exists()
-                and (d / "preprocessor.joblib").exists()
-                and (d / "label_encoder.joblib").exists()
-            ]
+        # Deploy one audited TF-IDF checkpoint only.  Do not expose local
+        # experiments or Word2Vec-backed models in the public demo.
+        saved_models_dir = DEPLOYED_MODEL_DIR.parent
+        available_models = [DEPLOYED_MODEL_DIR.name] if all(
+            (DEPLOYED_MODEL_DIR / artifact).exists()
+            for artifact in (
+                "model.joblib",
+                "pipeline_config.json",
+                "preprocessor.joblib",
+                "label_encoder.joblib",
+                "vectorizer.joblib",
+            )
+        ) else []
 
         if available_models:
             selected_model = st.selectbox(
-                "Select Model",
+                "Deployed Model",
                 available_models,
                 index=0,
-                help="Choose which trained model to use for predictions",
+                help="This deployment is pinned to its audited TF-IDF model.",
             )
-            model_path = str(saved_models_dir / selected_model)
-            card_path = saved_models_dir / selected_model / "model_card.json"
+            model_path = str(DEPLOYED_MODEL_DIR)
+            st.caption(f"Deployed model: **{DEPLOYED_MODEL_NAME}**")
+            card_path = DEPLOYED_MODEL_DIR / "model_card.json"
             if card_path.exists():
                 try:
                     card = json.loads(card_path.read_text(encoding="utf-8"))
@@ -329,8 +333,8 @@ def main():
         st.markdown("---")
         st.markdown("### 📊 About")
         st.markdown("""
-        This classifier uses deep learning models trained on 88,000+ news headlines
-        to predict the topic of any news headline.
+        This demo uses a TF-IDF Logistic Regression model trained on 88,000+
+        news headlines to predict the topic of any headline.
 
         **Categories:**
         - 💼 Business

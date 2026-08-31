@@ -154,8 +154,11 @@ python main.py predict --model saved_models/best_model/ --file headlines.txt --o
 ### Streamlit Web App
 
 ```bash
-streamlit run app/streamlit_app.py
+python -m streamlit run app/streamlit_app.py
 ```
+
+The deployed Streamlit app is pinned to the compact TF-IDF Logistic Regression
+checkpoint in `app/model/`; it does not require Word2Vec or Gensim.
 
 ### FastAPI REST API
 
