@@ -141,6 +141,21 @@ class NewsClassifier:
         if pipeline_path.exists():
             with open(pipeline_path, encoding="utf-8") as fh:
                 pipeline = json.load(fh)
+        if not pipeline:
+            raise FileNotFoundError(
+                f"Checkpoint '{checkpoint_dir}' is incomplete: missing "
+                "pipeline_config.json. It cannot be evaluated or used for "
+                "prediction because its architecture, feature type, and "
+                "preprocessing metadata are unknown. Retrain this model with "
+                "the current training command."
+            )
+
+        feature_type = pipeline.get("feature_type")
+        if feature_type not in {"tfidf", "word2vec", "distilbert"}:
+            raise ValueError(
+                f"Checkpoint '{checkpoint_dir}' has an unsupported or missing "
+                f"feature_type: {feature_type!r}. Retrain it with the current pipeline."
+            )
 
         # Load components
         preprocessor = cls._load_component(
@@ -156,8 +171,21 @@ class NewsClassifier:
             checkpoint_dir / "vocab.joblib", "vocab"
         )
 
+        missing_components = []
+        if preprocessor is None:
+            missing_components.append("preprocessor.joblib")
+        if label_encoder is None:
+            missing_components.append("label_encoder.joblib")
+        if feature_type == "tfidf" and vectorizer is None:
+            missing_components.append("vectorizer.joblib")
+        if missing_components:
+            raise FileNotFoundError(
+                f"Checkpoint '{checkpoint_dir}' is incomplete: missing "
+                f"{', '.join(missing_components)}. Retrain this model with "
+                "the current training command."
+            )
+
         # Load model (PyTorch or sklearn)
-        feature_type = pipeline.get("feature_type")
         if feature_type == "word2vec" and vectorizer is None:
             from src.embeddings import Word2VecFeatureExtractor
             vectorizer = Word2VecFeatureExtractor(config.word2vec).load_pretrained()
@@ -361,6 +389,14 @@ class NewsClassifier:
                 max_length=self.config.distilbert.max_length, return_tensors="pt",
             )
         if self.vectorizer is not None:
+            # RNN, attention, and Transformer checkpoints are trained on
+            # fixed-length Word2Vec *sequences*.  The extractor also exposes
+            # averaged document vectors, so select sequences explicitly
+            # before its generic feature methods.
+            if self.feature_type == "word2vec" and hasattr(self.vectorizer, "texts_to_sequences"):
+                return self.vectorizer.texts_to_sequences(
+                    texts, max_len=self.config.sequence.max_len
+                )
             # Check if vectorizer has transform method (TF-IDF, etc.)
             if hasattr(self.vectorizer, "transform"):
                 return self.vectorizer.transform(texts)
@@ -406,6 +442,11 @@ class NewsClassifier:
         """
         if self.feature_type == "distilbert":
             total = int(features["input_ids"].shape[0])
+        elif hasattr(features, "shape"):
+            # scipy sparse matrices deliberately reject ``len(matrix)``
+            # because it is ambiguous.  Rows are the batch dimension for
+            # dense arrays and sparse TF-IDF matrices alike.
+            total = int(features.shape[0])
         else:
             total = len(features)
         if total == 0:

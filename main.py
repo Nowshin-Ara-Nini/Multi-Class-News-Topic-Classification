@@ -21,6 +21,37 @@ from pathlib import Path
 import numpy as np
 
 
+# Each selectable architecture has exactly one compatible feature modality.
+# Keep this mapping next to the CLI declaration so validation and dispatch
+# cannot drift apart.
+_MODEL_FEATURES = {
+    "logistic_regression": "tfidf",
+    "dnn": "tfidf",
+    "rnn": "word2vec",
+    "birnn": "word2vec",
+    "gru": "word2vec",
+    "bigru": "word2vec",
+    "lstm": "word2vec",
+    "bilstm": "word2vec",
+    "attention": "word2vec",
+    "transformer": "word2vec",
+    "distilbert": "distilbert",
+}
+
+
+def _resolve_feature_types(model: str | None, features: str | None) -> list[str]:
+    """Return the feature branches needed by a valid train command.
+
+    A specific architecture never needs unrelated feature extractors.  With
+    no model selected, the default is the complete 11-model suite.
+    """
+    if model is not None:
+        return [_MODEL_FEATURES[model]]
+    if features == "all" or features is None:
+        return ["tfidf", "word2vec", "distilbert"]
+    return [features]
+
+
 # ---------------------------------------------------------------------------
 # Argument Parser
 # ---------------------------------------------------------------------------
@@ -87,7 +118,7 @@ Examples:
     train_parser.add_argument(
         "--features", type=str, default=None,
         choices=["tfidf", "word2vec", "distilbert", "all"],
-        help="Feature type. Default: tfidf+word2vec.",
+        help="Feature type. Default: all features for the full suite; the required feature for one selected model.",
     )
     train_parser.add_argument(
         "--quick-test", action="store_true",
@@ -138,7 +169,15 @@ Examples:
         help="Metric to sort by.",
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.command == "train" and args.model and args.features not in (None, "all"):
+        required_feature = _MODEL_FEATURES[args.model]
+        if args.features != required_feature:
+            parser.error(
+                f"--model {args.model!r} requires --features {required_feature!r}; "
+                f"got {args.features!r}. Use --features all or omit --features."
+            )
+    return args
 
 
 # ---------------------------------------------------------------------------
@@ -286,17 +325,12 @@ def _evaluate_after_training(args, save_dir: Path, test_df, results_dir: str, ex
     """Run and retain a held-out test evaluation for one newly saved model."""
     if args.skip_test_eval:
         return
-    try:
-        metrics = _evaluate_checkpoint(
-            save_dir, test_df, Path(results_dir) / exp_name
-        )
-        # Keep validation and test results together without pretending they
-        # are the same measurement.
-        all_results[exp_name].update({f"test_{key}": value for key, value in metrics.items()})
-        logger.info("  [TEST] %s | Acc: %.4f | Macro F1: %.4f", exp_name, metrics["accuracy"], metrics["f1_macro"])
-    except Exception as exc:
-        logger.exception("Test evaluation failed for %s: %s", exp_name, exc)
-        all_results[exp_name]["test_evaluation_error"] = str(exc)
+    metrics = _evaluate_checkpoint(save_dir, test_df, Path(results_dir) / exp_name)
+    # Keep validation and test results together without pretending they are
+    # the same measurement.  Evaluation failures intentionally propagate: a
+    # completed training run must not masquerade as a fully evaluated one.
+    all_results[exp_name].update({f"test_{key}": value for key, value in metrics.items()})
+    logger.info("  [TEST] %s | Acc: %.4f | Macro F1: %.4f", exp_name, metrics["accuracy"], metrics["f1_macro"])
 
 
 # ---------------------------------------------------------------------------
@@ -369,14 +403,7 @@ def cmd_train(args: argparse.Namespace) -> None:
     else:
         prep_modes = [config.preprocessing.mode]
 
-    if args.features == "all":
-        feat_types = ["tfidf", "word2vec", "distilbert"]
-    elif args.features:
-        feat_types = [args.features]
-    elif args.model == "distilbert":
-        feat_types = ["distilbert"]
-    else:
-        feat_types = ["tfidf", "word2vec"]
+    feat_types = _resolve_feature_types(args.model, args.features)
 
     all_results: dict = {}
     # ------------------------------------------------------------------
@@ -508,7 +535,10 @@ def cmd_train(args: argparse.Namespace) -> None:
                 from transformers import AutoTokenizer
                 from src.datasets import DistilBERTDataset
             except ImportError as exc:
-                logger.warning("DistilBERT skipped: install optional dependencies (%s)", exc)
+                raise RuntimeError(
+                    "DistilBERT was selected but its optional dependencies are unavailable. "
+                    "Install the project's requirements before training."
+                ) from exc
             else:
                 exp_name = f"distilbert_{prep_mode}"
                 logger.info(
@@ -576,8 +606,10 @@ def cmd_train(args: argparse.Namespace) -> None:
             try:
                 w2v.load_pretrained()
             except Exception as exc:
-                logger.warning("Could not load Word2Vec (%s). Skipping w2v branch.", exc)
-                continue
+                raise RuntimeError(
+                    "Word2Vec was selected but the configured pretrained embeddings could not be loaded. "
+                    "Download/cache the configured model, or select a TF-IDF or DistilBERT model."
+                ) from exc
 
             with timer("Building sequence arrays", logger):
                 X_tr_seq = w2v.texts_to_sequences(X_train_texts, max_len=config.sequence.max_len)
