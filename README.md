@@ -153,31 +153,20 @@ python main.py predict --model saved_models/best_model/ --file headlines.txt --o
 
 ### Streamlit Web App
 
-```bash
-python -m streamlit run app/streamlit_app.py
-```
+## 🌐 Live Demo
 
-The deployed Streamlit app is pinned to the compact TF-IDF Logistic Regression
-checkpoint in `app/model/`; it does not require Word2Vec or Gensim.
+Try the deployed application:
 
-### FastAPI REST API
-
-```bash
-# Start API server
-MODEL_DIR=saved_models/best_model uvicorn api.main:app --host 0.0.0.0 --port 8000
-
-# View API docs
-# http://localhost:8000/docs
-```
-
-### Docker
-
-```bash
-docker build -t news-classifier .
-docker run -p 8000:8000 -v ./saved_models:/app/saved_models news-classifier
-```
+🔗 https://multi-class-news-topic-classification-jqcledbcwe2eyb4avn87ck.streamlit.app
 
 ---
+
+## 🚀 Streamlit Web App
+
+Launch locally:
+
+```bash
+streamlit run app/streamlit_app.py
 
 ## 📊 Models & Results
 
@@ -238,46 +227,7 @@ rnn:
 
 ---
 
-## 📁 API Reference
 
-### `POST /predict`
-Example request:
-
-```bash
-curl -X POST http://localhost:8000/predict \
-  -H "Content-Type: application/json" \
-  -d "{\"text\": \"Apple reports record quarterly revenue\"}"
-```
-
-```json
-{
-  "text": "Apple reports record quarterly revenue"
-}
-```
-
-Response:
-```json
-{
-  "success": true,
-  "result": {
-    "predicted_class": "Business",
-    "confidence": 0.94,
-    "probabilities": {
-      "Business": 0.94,
-      "Science and Technology": 0.03,
-      "Sports": 0.01,
-      "World News": 0.02
-    }
-  }
-}
-```
-
-### `POST /batch_predict`
-```json
-{
-  "texts": ["headline 1", "headline 2", "..."]
-}
-```
 
 ### `GET /health`
 Returns API status and model information.
