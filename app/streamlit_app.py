@@ -665,29 +665,56 @@ def main():
         best_model_path = get_best_model(candidate_paths, all_results) if candidate_paths else None
 
         if not candidate_paths:
-            # Clear diagnostic message without asking web users to run CLI commands
-            st.error("❌ **No trained model checkpoints found.**")
-            st.markdown("""
-            **Deployment Checklist:**
-            - For **Production**: set environment variable `MODEL_DIR` to your model artifact folder (e.g. `saved_models/lr_optimum_tfidf` or `app/model`).
-            - For **Local Development**: ensure checkpoints reside in `saved_models/` or run training via `python main.py train`.
-            """)
-            st.stop()
-
-        if mode == "production" and pinned_path:
-            # Production Mode: Pinned model, selector hidden for fast startup and low memory
+            st.markdown('<div class="health-badge health-bad">❌ No Model Checkpoint Found</div>', unsafe_allow_html=True)
+            st.warning("No model artifacts found on this deployment server.")
+            with st.expander("ℹ️ How to Deploy Models"):
+                st.markdown("""
+                **For Streamlit Cloud / Production:**
+                Commit the model in `app/model/` to GitHub:
+                ```bash
+                git add app/model
+                git commit -m "Add deployed model"
+                git push origin main
+                ```
+                Or configure `MODEL_DIR` in Streamlit Cloud Secrets.
+                """)
+            meta = {
+                "model_name": "None",
+                "display_name": "No Model Deployed",
+                "architecture": "N/A",
+                "feature_type": "N/A",
+                "preprocessing_mode": "N/A",
+                "val_accuracy": "N/A",
+                "val_f1": "N/A",
+                "parameter_count": "N/A",
+                "dataset_size": "88,000+ Headlines",
+                "training_date": "N/A",
+                "classes": list(CLASS_COLORS.keys()),
+            }
+        elif mode == "production" and pinned_path:
             active_model_path = pinned_path
             st.markdown(
                 '<div class="health-badge health-good">🔒 Production Mode (Pinned Model)</div>',
                 unsafe_allow_html=True,
             )
+            health = check_deployment_health(active_model_path)
+            if health["healthy"]:
+                st.markdown('<div class="health-badge health-good">✅ Deployment Healthy</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="health-badge health-bad">❌ {health["message"]}</div>', unsafe_allow_html=True)
+
+            with st.expander("🔍 Deployment Artifacts Status", expanded=not health["healthy"]):
+                for component, status in health.get("details", {}).items():
+                    icon = "✅" if status else "❌"
+                    st.markdown(f"- {icon} **{component}**")
+
+            meta = extract_model_metadata(active_model_path, all_results)
         else:
             # Development Mode: Multi-model selector with smart default (best Val-F1)
             st.caption("🛠️ **Development Mode** (Multiple models detected)")
             model_options = {d.name: d for d in candidate_paths}
             options_list = list(model_options.keys())
 
-            # Priority default: Best model by Val-F1
             default_index = 0
             if best_model_path and best_model_path.name in model_options:
                 default_index = options_list.index(best_model_path.name)
@@ -703,20 +730,18 @@ def main():
             if best_model_path and active_model_path == best_model_path:
                 st.markdown('<div class="best-badge">🏆 Best Available Model</div>', unsafe_allow_html=True)
 
-        # Deployment Health Check
-        health = check_deployment_health(active_model_path)
-        if health["healthy"]:
-            st.markdown('<div class="health-badge health-good">✅ Deployment Healthy</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="health-badge health-bad">❌ {health["message"]}</div>', unsafe_allow_html=True)
+            health = check_deployment_health(active_model_path)
+            if health["healthy"]:
+                st.markdown('<div class="health-badge health-good">✅ Deployment Healthy</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="health-badge health-bad">❌ {health["message"]}</div>', unsafe_allow_html=True)
 
-        with st.expander("🔍 Deployment Artifacts Status", expanded=not health["healthy"]):
-            for component, status in health.get("details", {}).items():
-                icon = "✅" if status else "❌"
-                st.markdown(f"- {icon} **{component}**")
+            with st.expander("🔍 Deployment Artifacts Status", expanded=not health["healthy"]):
+                for component, status in health.get("details", {}).items():
+                    icon = "✅" if status else "❌"
+                    st.markdown(f"- {icon} **{component}**")
 
-        # Dynamic Model Metadata Panel
-        meta = extract_model_metadata(active_model_path, all_results)
+            meta = extract_model_metadata(active_model_path, all_results)
 
         st.markdown("---")
         st.markdown("### 📊 Model Specifications")
@@ -734,7 +759,6 @@ def main():
         </table>
         """, unsafe_allow_html=True)
 
-        # Leaderboard (Development Mode only)
         if mode == "development" and len(candidate_paths) > 1:
             st.markdown("---")
             st.markdown("### 🏆 Model Leaderboard (Top 5)")
@@ -750,7 +774,6 @@ def main():
             ])
             st.dataframe(lb_df, hide_index=True, use_container_width=True)
 
-        # About Categories
         st.markdown("---")
         st.markdown("### 🏷️ Supported Topics")
         for cls in meta["classes"]:
@@ -768,6 +791,20 @@ def main():
         <p>Classify news headlines into topic categories using trained production NLP models ({meta['display_name']})</p>
     </div>
     """, unsafe_allow_html=True)
+
+    if not active_model_path:
+        st.warning("⚠️ **No Active Model Checkpoint Found on this Deployment**")
+        st.info("""
+        **To enable predictions on Streamlit Cloud:**
+        1. Ensure the deployed model checkpoint in `app/model/` is committed and pushed to GitHub:
+           ```bash
+           git add app/model
+           git commit -m "Add deployed model checkpoint"
+           git push origin main
+           ```
+        2. Or configure `MODEL_DIR` in Streamlit Cloud Dashboard > Settings > Secrets.
+        """)
+        return
 
     # Load Model with Diagnostics
     classifier, load_error = load_classifier_with_diagnostics(str(active_model_path))

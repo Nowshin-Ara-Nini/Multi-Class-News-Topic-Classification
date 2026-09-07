@@ -1,0 +1,35 @@
+{
+  "model_name": "lr_optimum_tfidf",
+  "architecture": "logistic_regression",
+  "feature_type": "tfidf",
+  "preprocessing_mode": "optimum",
+  "classes": [
+    "Business",
+    "Science and Technology",
+    "Sports",
+    "World News"
+  ],
+  "parameter_count": null,
+  "model_size_mb": 29.715,
+  "training_summary": {
+    "best_val_f1": 0.911,
+    "best_val_acc": 0.9228
+  },
+  "environment": {
+    "captured_at_utc": "2026-08-31T13:48:49.489523+00:00",
+    "python_version": "3.12.3",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "torch_version": "2.6.0+cu124",
+    "numpy_version": "2.5.1",
+    "scikit_learn_version": "1.9.0",
+    "transformers_version": "4.57.6",
+    "device": "cuda",
+    "cuda_available": true,
+    "mps_available": false,
+    "gpu_name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+    "gpu_count": 1,
+    "gpu_memory_gb": 15.99,
+    "cuda_version": "12.4",
+    "cudnn_version": 90100
+  }
+}

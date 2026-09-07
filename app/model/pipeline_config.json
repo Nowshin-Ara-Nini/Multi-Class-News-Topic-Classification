@@ -1,0 +1,12 @@
+{
+  "feature_type": "tfidf",
+  "model_name": "logistic_regression",
+  "model_kwargs": {},
+  "preprocessing_mode": "optimum",
+  "class_names": [
+    "Business",
+    "Science and Technology",
+    "Sports",
+    "World News"
+  ]
+}
