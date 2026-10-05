@@ -8,7 +8,9 @@ import json
 from pathlib import Path
 import pytest
 
-from app.streamlit_app import (
+pytest.importorskip("streamlit", reason="Archived UI; Streamlit is not a production dependency")
+
+from legacy.streamlit_app import (
     is_valid_checkpoint,
     check_deployment_health,
     get_best_model,

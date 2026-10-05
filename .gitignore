@@ -83,3 +83,17 @@ desktop.ini
 .env
 .env.local
 .cache/
+
+# Web and prepared deployment artifacts
+node_modules/
+.next/
+.vercel/
+*.tsbuildinfo
+.env.*
+!.env.example
+# Include the prepared API source/configuration for Vercel Git deployments.
+# The model artifact stays out of Git and is fetched privately from Hugging Face.
+!deploy/
+!deploy/vercel-api/
+deploy/vercel-api/model/
+/Dockerfile

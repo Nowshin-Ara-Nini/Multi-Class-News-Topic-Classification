@@ -1,286 +1,265 @@
-# 📰 News Topic Classification
+# News Topic Classification
 
-> A production-grade NLP system for classifying news headlines into topic categories using classical ML and deep learning approaches.
+A four-topic classifier with a Next.js website and FastAPI inference backend,
+prepared for two Vercel projects. The former Streamlit interface is archived in
+`legacy/`.
 
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch 2.0+](https://img.shields.io/badge/pytorch-2.0+-red.svg)](https://pytorch.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+The implementation has **not been trained, tested, built, or deployed**. Historical
+DistilBERT test macro F1 is approximately 93.53%; **95%+ remains a target**.
+Run the commands below yourself. New results and live URLs do not exist yet.
 
----
+## Training and test data are separate
 
-## 🎯 Overview
+- `data/Training_data_9.csv` is the only CSV read by `train`, `tune`, and `benchmark`.
+- `data/Test_data.csv` is read only by explicit final evaluation commands. It is
+  never used for training, cleaning training data, fitting features, architecture
+  selection, early stopping, hyperparameter search, or deployment optimization.
+- Training normalizes duplicate identities, removes conflicting training-label
+  groups, and persists a shared stratified 80/20 split. Original CSVs are unchanged.
+- The historical audited cleaned file is deliberately not reused: its creation
+  consulted test identities. The new workflow cleans the original training CSV alone.
+- Training does not inspect test overlap. A separate audit would be needed to
+  establish whether the supplied files contain overlapping examples.
+- This test set has been evaluated historically; describe scores as benchmark
+  results, not evidence from a previously untouched holdout.
 
-This project classifies news headlines into **4 categories**:
+## Setup (PowerShell, project root)
 
-| Category | Icon | Description |
-|----------|------|-------------|
-| **Business** | 💼 | Corporate news, markets, finance |
-| **Science and Technology** | 🔬 | Scientific discoveries, tech innovations |
-| **Sports** | ⚽ | Athletic competitions, player news |
-| **World News** | 🌍 | International events, politics |
+Use Python 3.12 and Node.js 20.9+.
 
-Trained on **88,000+ headlines**, the project reports metrics from the held-out
-test set through `python main.py evaluate`. Do not treat validation scores as
-test scores: the current audited sparse baseline reaches **92.36% accuracy**
-and **92.33% macro F1** on the provided 12,000-row test set. A verified 95%
-result has not yet been achieved.
-
----
-
-## 🏗️ Architecture
-
-```mermaid
-flowchart LR
-    Data[CSV headlines] --> Prep[Text preprocessing]
-    Prep --> TFIDF[TF-IDF features]
-    Prep --> W2V[Word2Vec sequences]
-    Prep --> BERT[DistilBERT tokens]
-    TFIDF --> Classical[Classical ML / DNN]
-    W2V --> Sequence[RNN / Attention / Transformer]
-    BERT --> Transformer[DistilBERT baseline]
-    Classical --> Eval[Evaluation & error analysis]
-    Sequence --> Eval
-    Transformer --> Eval
-    Eval --> Serve[CLI, FastAPI, Streamlit]
-```
-
-```
-project/
-├── configs/                    # Configuration management
-│   ├── config.py              # Dataclass-based config
-│   └── default.yaml           # Default hyperparameters
-├── src/                       # Core source code
-│   ├── preprocessing.py       # Text preprocessing pipeline
-│   ├── datasets.py            # Dataset & vocabulary management
-│   ├── embeddings.py          # Feature extraction (TF-IDF, Word2Vec)
-│   ├── models/                # Model architectures
-│   │   ├── classical.py       # Logistic Regression
-│   │   ├── dnn.py             # Feed-forward DNN
-│   │   ├── rnn.py             # RNN/GRU/LSTM (uni + bi)
-│   │   ├── attention.py       # BiLSTM + Attention
-│   │   └── transformer.py     # Transformer Encoder
-│   ├── trainer.py             # Unified training pipeline
-│   ├── evaluation.py          # Metrics & visualization
-│   ├── error_analysis.py      # Error analysis utilities
-│   └── inference.py           # Production inference
-├── app/                       # Streamlit web app
-├── api/                       # FastAPI REST API
-├── notebooks/                 # Jupyter notebooks
-├── data/                      # Dataset files
-├── saved_models/              # Trained model checkpoints
-├── results/                   # Evaluation results & plots
-├── main.py                    # CLI entry point
-├── requirements.txt           # Dependencies
-├── Dockerfile                 # Container deployment
-└── README.md                  # This file
-```
-
----
-
-## 🚀 Quick Start
-
-### 1. Installation
-
-```bash
-# Clone the repository
-git clone <repo-url>
-cd project
-
-# Create virtual environment
+```powershell
 python -m venv .venv
-.venv\Scripts\activate  # Windows
-# source .venv/bin/activate  # Linux/Mac
-
-# Install dependencies
-pip install -r requirements.txt
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 ```
 
-The first DistilBERT run downloads `distilbert-base-uncased` from Hugging Face.
-If your network blocks `huggingface.co`, download the complete model snapshot on
-another connected machine, copy it into this project (for example,
-`models/distilbert-base-uncased/`), and set `distilbert.model_name` in your
-training YAML to that local directory.
+For GPU training, use a CUDA-enabled PyTorch build compatible with your driver:
+[official installer](https://pytorch.org/get-started/locally/).
+DistilBERT and Google News Word2Vec download pretrained resources on first use.
+Allow disk space for their caches and per-trial checkpoints.
 
-Or use Conda:
+## 1. Train and tune ? training CSV only
 
-```bash
-conda create -n news-classifier python=3.12 -y
-conda activate news-classifier
-pip install -r requirements.txt
+```powershell
+python main.py tune --config configs/improve.yaml --budget-hours 24 --output results/improvement
 ```
 
-### 2. Prepare Data
+Repeating the command skips completed trials. Interrupted/failed trials restart
+from their configuration, not from optimizer state. The study retains consumed
+phase time; increase `--budget-hours` to extend it. Use a new output directory if
+changing configuration or data.
 
-Place your dataset files in the `data/` directory:
-- `data/Training_data_9.csv`
-- `data/Test_data.csv`
+The budget allocates eight hours to baseline/preprocessing screening, eight to
+architecture/hyperparameter candidates, and six to seed confirmation. The
+remaining two hours are reserved for your separately invoked evaluation/report
+work: tuning never automatically evaluates test data. Six upgraded trials per
+family are planned by default; change this with `--trials-per-family`.
 
-### 3. Train Models
+Review:
 
-```bash
-# Train all models with default configuration
-python main.py train --config configs/default.yaml
+- `results/improvement/study.json`: configurations, statuses, timing, validation results.
+- `results/improvement/split_manifest.json`: shared training/validation partition.
+- `results/improvement/selection.json`: per-family selections and the overall
+  validation-selected winner. Check `missing_families` and `confirmation_complete`.
+- Per-trial folders: logs, configuration, selected-epoch metrics, history and weights.
 
-# Quick smoke test (2 epochs, 1000 samples)
-python main.py train --config configs/default.yaml --quick-test
+To train just one upgraded model:
 
-# Train a specific model
-python main.py train --model bilstm --preprocessing optimum --features word2vec
-
-# Train with all preprocessing modes
-python main.py train --preprocessing all --features all
+```powershell
+python main.py train --config configs/improve.yaml --model distilbert --preprocessing raw
 ```
 
-### 4. Evaluate
+Neither command opens the test CSV. The old `--skip-test-eval` option remains
+accepted for compatibility but is unnecessary.
 
-```bash
-python main.py evaluate --model saved_models/bilstm_optimum_word2vec/
+| Family | Implemented upgrades |
+|---|---|
+| LR | Configurable regularization/class weighting; word + character TF-IDF |
+| DNN | Optional 512-wide residual blocks, LayerNorm and GELU |
+| RNN/BiRNN, GRU/BiGRU, LSTM/BiLSTM | Trainable embeddings, separate PAD/UNK, longer inputs, compact classifier |
+| Attention | Attention + mean + max pooling |
+| Custom Transformer | Independent attention initialization, input normalization, pooling/depth/width search |
+| DistilBERT | Full fine-tuning, CLS + mean pooling, encoder/head learning rates, warmup/decay |
+
+Shared training supports gradient accumulation, AMP, AdamW parameter groups and
+validation-macro-F1 checkpoint selection. Legacy vector-input checkpoints remain
+loadable; new sequence checkpoints use `word2vec_ids`.
+
+## 2. Export and check CPU suitability ? validation data only
+
+```powershell
+$selection = Get-Content results/improvement/selection.json -Raw | ConvertFrom-Json
+python main.py export --selection results/improvement/selection.json --output deploy/vercel-api/model
+python main.py benchmark --model deploy/vercel-api/model --reference $selection.model_dir
 ```
 
-### 5. Predict
+The benchmark is for you to run; it evaluates the saved validation partition
+from the training CSV. Export removes optimizer state and duplicate base-model
+weights. Use an empty output directory to protect previous releases.
 
-```bash
-# Single prediction
-python main.py predict --model saved_models/best_model/ --text "Apple reports record revenue"
+CPU gates: peak process RAM below 1.5 GB, warm p95 prediction below five seconds,
+initialization plus prediction below 60 seconds, ten-item batch below 60 seconds,
+and validation macro-F1 loss no greater than 0.1 percentage point. These local
+measurements do not guarantee Vercel performance.
 
-# Batch prediction from file
-python main.py predict --model saved_models/best_model/ --file headlines.txt --output results.json
+If the FP32 export fails, create a separate INT8 candidate:
+
+```powershell
+python main.py export --selection results/improvement/selection.json --quantize --output deploy/vercel-int8/model
+python main.py benchmark --model deploy/vercel-int8/model --reference $selection.model_dir --output results/deployment_benchmark_int8.json
 ```
 
----
+Only proceed with a passing candidate. For INT8, substitute `deploy/vercel-int8`
+for `deploy/vercel-api` below. No automatic LR fallback or paid upgrade occurs.
 
-## 🌐 Deployment
+## 3. Final test evaluation ? freeze choices first
 
-### Streamlit Web App
-
-## 🌐 Live Demo
-
-Try the deployed application:
-
-🔗 https://multi-class-news-topic-classification-jqcledbcwe2eyb4avn87ck.streamlit.app
-
----
-
-## 🚀 Streamlit Web App
-
-Launch locally:
-
-```bash
-streamlit run app/streamlit_app.py
-
-## 📊 Models & Results
-
-### Model Comparison
-
-| Model | Features | Preprocessing | Accuracy | Macro F1 |
-|-------|----------|---------------|----------|----------|
-| Word + character Linear SVM | TF-IDF | Raw | 0.9236 | 0.9233 |
-| Existing Transformer checkpoint | Validation only | Raw | 0.9280 | 0.9160 |
-
-The second row is retained only as a historical validation result from the
-repository. Re-run evaluation on `data/Test_data.csv` before presenting any
-model as a final result.
-
-### Model Details
-
-| Architecture | Parameters | Input | Key Features |
-|-------------|------------|-------|--------------|
-| **LogisticRegression** | ~80K | TF-IDF (20K) | LBFGS solver, L2 regularization |
-| **DNN** | ~1.3M | TF-IDF (20K) | 256→128→64, Dropout 0.4 |
-| **BiLSTM** | ~854K | Word2Vec (300d) | 2-layer, mean+max pooling, LayerNorm |
-| **Attention** | ~900K | Word2Vec (300d) | BiLSTM + self-attention |
-| **Transformer** | ~1.5M | Word2Vec (300d) | 4-layer encoder, positional encoding |
-
----
-
-## ⚙️ Configuration
-
-All hyperparameters are centralized in `configs/default.yaml`:
-
-```yaml
-# Key settings
-training:
-  epochs: 15
-  batch_size: 64
-  learning_rate: 0.0003
-  early_stopping: true
-  patience: 4
-  gradient_clip: 5.0
-
-rnn:
-  cell_type: "lstm"
-  hidden_size: 256
-  num_layers: 2
-  bidirectional: true
-  pooling: "mean_max"
+```powershell
+python main.py evaluate-selected --selection results/improvement/selection.json --data data/Test_data.csv --output results/final_test
+python main.py evaluate --model deploy/vercel-api/model --data data/Test_data.csv --output results/deployed_test --device cpu
 ```
 
----
+The first command evaluates the selected checkpoint from each family. The
+second measures the exact serving artifact. Evaluation never changes the
+validation-selected winner. Do not tune again against these test scores.
 
-## 🔬 Preprocessing Pipelines
+Reports include macro F1, accuracy, per-class metrics, confusion matrices,
+error analysis and a bootstrap 95% macro-F1 confidence interval. The serving
+model card links scores to the artifact and dataset hashes.
 
-| Mode | Description | Operations |
-|------|-------------|------------|
-| **Raw** | No processing | Strip whitespace only |
-| **Extreme** | Heavy cleaning | Remove HTML, lowercase, remove all special chars/numbers, remove stopwords, lemmatize |
-| **Optimum** | Balanced | Remove HTML, lowercase, expand contractions, controlled cleaning, selective stopword removal, lemmatize |
+## 4. Prepare the API and publish its model artifact
 
----
-
-
-
-### `GET /health`
-Returns API status and model information.
-
-### `GET /model/info` and `GET /model/version`
-Return the saved model card (when available) and deployed API/model version.
-Set `API_KEY` in the environment to require an `X-API-Key` request header for
-prediction endpoints.
-
----
-
-## 🛠️ Development
-
-### Project was refactored from a monolithic Jupyter notebook addressing:
-- ✅ **30 identified issues** (duplicate code, magic numbers, missing docs, etc.)
-- ✅ **6 duplicate training loops** → 1 unified `Trainer` class
-- ✅ **14 copy-pasted plots** → 1 `Evaluator` class
-- ✅ **6 separate RNN classes** → 1 parameterized `RecurrentClassifier`
-- ✅ **TensorFlow dependency removed** (was used only for tokenization)
-- ✅ **Full reproducibility** with seed management
-- ✅ **Early stopping, LR scheduling, gradient clipping** added
-- ✅ **Model checkpointing and inference pipeline** added
-
----
-
-## Future Work
-
-- Fine-tune the optional DistilBERT encoder on a GPU and compare it on the
-  held-out test split.
-- Add calibration analysis and confidence-threshold monitoring for deployed
-  predictions.
-- Publish experiment artifacts and model cards for each production candidate.
-
----
-
-## 📄 License
-
-This project is for educational and portfolio purposes.
-
----
-
-## 🙏 Acknowledgments
-
-- Dataset: AG News classification dataset
-- Pre-trained embeddings: Google News Word2Vec (300d)
-- Course: CSE 440
-
----
-
-## Citation
-
-If you build on this repository, please cite it as:
-
-```text
-Nowshin. News Topic Classification. CSE 440 portfolio project, 2026.
+```powershell
+python main.py prepare-vercel --output deploy/vercel-api
+hf auth login
+python scripts/publish_model.py --repo YOUR_USERNAME/news-topic-classifier --folder deploy/vercel-api/model
 ```
+
+The publish command creates a private Hugging Face model repository and prints
+`MODEL_REPO_ID` and the immutable `MODEL_REVISION`. This is model storage;
+inference runs on Vercel CPU. No Space or paid compute is required. Preparation
+pins serialization-library versions to the local environment.
+
+Create the API Vercel project:
+
+```powershell
+Set-Location deploy/vercel-api
+npx vercel link
+npx vercel env add API_KEY
+npx vercel env add MODEL_REPO_ID
+npx vercel env add MODEL_REVISION
+npx vercel env add HF_TOKEN
+npx vercel env add VERCEL_SUPPORT_LARGE_FUNCTIONS
+npx vercel
+```
+
+Add variables for both Preview and Production when prompted:
+
+| Variable | Value |
+|---|---|
+| `API_KEY` | A long random secret; reuse it as the frontend's `INFERENCE_API_KEY` |
+| `MODEL_REPO_ID` | Repository printed by the upload command |
+| `MODEL_REVISION` | Full 40-character commit SHA printed by that command |
+| `HF_TOKEN` | Read token for the private model repository |
+| `VERCEL_SUPPORT_LARGE_FUNCTIONS` | `1` |
+
+The build downloads and verifies model files. Requests do not download weights.
+Use Python 3.12 and the included entry point/build configuration. Vercel Hobby
+has 2 GB memory; eligible large-functions beta bundles may be up to 5 GB.
+See [Vercel's limits](https://vercel.com/docs/functions/limitations). Stay on Hobby;
+no paid hosting is assumed.
+
+Check authenticated `/ready`, predictions, batches, cold starts and logs on the
+preview before production:
+
+```powershell
+npx vercel --prod
+Set-Location ../..
+```
+
+## 5. Run and deploy the website
+
+Start the local API in another terminal:
+
+```powershell
+$env:MODEL_DIR = "deploy/vercel-api/model"
+$env:API_KEY = "YOUR_LOCAL_SECRET"
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+```
+
+Start the website:
+
+```powershell
+Set-Location web
+Copy-Item .env.example .env.local
+npm install
+npm run dev
+```
+
+Edit `.env.local` to match the local API secret. Open `http://localhost:3000`.
+Do not use `NEXT_PUBLIC_` for credentials.
+
+For deployment, from `web/`:
+
+```powershell
+npx vercel link
+npx vercel env add INFERENCE_API_URL
+npx vercel env add INFERENCE_API_KEY
+npx vercel
+```
+
+Set the API production URL and secret for both Preview and Production. If the
+API has Vercel deployment protection, also add `INFERENCE_VERCEL_BYPASS_SECRET`.
+The browser calls same-origin Next.js routes; credentials stay on the server.
+After checking the preview:
+
+```powershell
+npx vercel --prod
+```
+
+The website includes single/batch predictions, topic probabilities, separate
+validation/test metrics, artifact identity and a read-only family comparison.
+Retain the prior artifact revision and Vercel deployment for rollback.
+
+## Optional checks for you to run
+
+From the project root, in the Python environment:
+
+```powershell
+python -m pytest tests -q
+```
+
+Archived Streamlit tests skip if Streamlit is absent. New regression coverage
+includes training without a test CSV, conflicting labels, PAD/UNK separation,
+padding invariance, independent attention initialization and artifact loading.
+
+From `web/`:
+
+```powershell
+npm run typecheck
+npm run build
+```
+
+No training, evaluation, test, build or deployment commands above were executed
+by the implementation agent.
+
+## API
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Liveness and model-loaded flag |
+| `GET /ready` | Load/check pinned model; return 503 on failure |
+| `POST /predict` | One headline, at most 5,000 characters |
+| `POST /batch_predict` | Up to 100 headlines; website sends chunks of ten |
+| `GET /model/info` | Metadata and metrics for the actual loaded artifact |
+| `GET /model/version` | API version and artifact hash |
+| `GET /models` | Read-only family comparison |
+
+All endpoints except liveness require `X-API-Key` when configured. An API key
+is mandatory on Vercel. One model is loaded per instance; overlapping inference
+receives 429 with a retry hint.
+
+## Attribution
+
+Educational CSE 440 portfolio project by Nowshin, 2026. Uses Google News
+Word2Vec and DistilBERT pretrained resources. See `LICENSE`.
