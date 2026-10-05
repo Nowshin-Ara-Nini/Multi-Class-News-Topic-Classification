@@ -121,11 +121,10 @@ class TransformerClassifier(nn.Module):
         num_encoder_layers: int = 4,
         dim_feedforward: int = 512,
         num_classes: int = 4,
-        max_seq_len: int = 35,
+        max_seq_len: int = 32,
         dropout: float = 0.3,
         pooling: str = "cls",
         input_dim: Optional[int] = None,
-        normalize_input: bool = False,
     ) -> None:
         super().__init__()
 
@@ -148,8 +147,6 @@ class TransformerClassifier(nn.Module):
         self.max_seq_len: int = max_seq_len
         self.dropout_rate: float = dropout
         self.pooling: str = pooling
-        self.normalize_input = normalize_input
-        self.input_norm = nn.LayerNorm(d_model) if normalize_input else nn.Identity()
 
         # ---- Optional input projection ----
         self.input_proj: Optional[nn.Linear] = None
@@ -217,11 +214,7 @@ class TransformerClassifier(nn.Module):
     def _init_weights(self) -> None:
         """Apply Xavier uniform initialisation to all linear layers."""
         for module in self.modules():
-            if isinstance(module, nn.MultiheadAttention):
-                nn.init.xavier_uniform_(module.in_proj_weight)
-                if module.in_proj_bias is not None:
-                    nn.init.zeros_(module.in_proj_bias)
-            elif isinstance(module, nn.Linear):
+            if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight)
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
@@ -280,15 +273,19 @@ class TransformerClassifier(nn.Module):
                 )
 
         # Scale embeddings (common Transformer practice)
-        x = self.input_norm(x) if self.normalize_input else x * math.sqrt(self.d_model)
+        x = x * math.sqrt(self.d_model)
 
         # Add positional encoding
         x = self.pos_encoder(x)
 
         # Transformer encoding
-        encoded = self.transformer_encoder(
-            x, src_key_padding_mask=src_key_padding_mask
-        )
+        attention_mask = src_key_padding_mask
+        if attention_mask is not None and self.pooling != "cls":
+            # Empty/OOV-only documents still need one attention key to avoid
+            # an all-masked softmax. Pooling retains the original mask.
+            attention_mask = attention_mask.clone()
+            attention_mask[attention_mask.all(dim=1), 0] = False
+        encoded = self.transformer_encoder(x, src_key_padding_mask=attention_mask)
 
         # Pooling
         pooled = self._pool_output(encoded, src_key_padding_mask)
@@ -335,7 +332,9 @@ class TransformerClassifier(nn.Module):
                     mask.unsqueeze(-1), float("-inf")
                 )
             pooled = encoded.max(dim=1).values
-            return torch.where(torch.isfinite(pooled), pooled, torch.zeros_like(pooled))
+            if mask is not None:
+                pooled = pooled.masked_fill(mask.all(dim=1, keepdim=True), 0.0)
+            return pooled
 
     # ------------------------------------------------------------------
     # Repr
