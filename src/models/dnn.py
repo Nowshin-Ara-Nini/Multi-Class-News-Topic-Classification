@@ -58,17 +58,6 @@ def _get_activation(name: str) -> nn.Module:
 # ---------------------------------------------------------------------------
 
 
-class ResidualBlock(nn.Module):
-    def __init__(self, width, dropout):
-        super().__init__()
-        self.block = nn.Sequential(nn.LayerNorm(width), nn.Linear(width, width),
-                                   nn.GELU(), nn.Dropout(dropout), nn.Linear(width, width),
-                                   nn.Dropout(dropout))
-
-    def forward(self, x):
-        return x + self.block(x)
-
-
 @register_model('dnn')
 class DNNClassifier(nn.Module):
     """Configurable feed-forward deep neural network classifier.
@@ -102,10 +91,9 @@ class DNNClassifier(nn.Module):
         input_dim: int,
         num_classes: int = 4,
         hidden_layers: Optional[List[int]] = None,
-        dropout: float = 0.4,
+        dropout: float = 0.3,
         activation: str = "relu",
         batch_norm: bool = False,
-        residual: bool = False,
     ) -> None:
         super().__init__()
 
@@ -135,12 +123,6 @@ class DNNClassifier(nn.Module):
         layers.append(nn.Linear(prev_dim, num_classes))
 
         self.network = nn.Sequential(*layers)
-        if residual:
-            self.network = nn.Sequential(
-                nn.Linear(input_dim, 512), nn.LayerNorm(512), nn.GELU(),
-                ResidualBlock(512, dropout), ResidualBlock(512, dropout),
-                nn.Linear(512, num_classes),
-            )
 
         # ---- Weight initialisation ----
         self._init_weights()
