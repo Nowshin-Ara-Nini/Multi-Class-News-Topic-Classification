@@ -107,6 +107,6 @@ export default function Home() {
         <p className="aside-note">One selected model serves predictions. No training or model selection happens on this website.</p>
       </aside>
     </div>
-    <footer><span>THE TOPIC DESK</span><p>Business · Science & technology · Sports · World news</p><span>BUILT WITH CURIOSITY.</span></footer>
+    <footer><span>THE TOPIC DESK</span><p>Business · Science & technology · Sports · World news</p><div className="credits"><a className="credit" href="https://github.com/Nowshin-Ara-Nini" target="_blank" rel="noreferrer">Created by Nowshin Ara Nini ↗</a><a className="credit" href="https://github.com/Nowshin-Ara-Nini/Multi-Class-News-Topic-Classification" target="_blank" rel="noreferrer">View source ↗</a></div></footer>
   </main>;
 }
