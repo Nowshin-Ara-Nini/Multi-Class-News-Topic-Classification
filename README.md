@@ -3,7 +3,7 @@
 An end-to-end news-headline classifier that predicts **Business**, **Science and Technology**, **Sports**, or **World News**. The project includes a validation-driven model-comparison workflow, an evaluated DistilBERT model, a FastAPI inference service, and a Next.js web application deployed as separate Vercel projects.
 
 <p align="center">
-  <a href="https://multi-class-news-topic-classificati-phi.vercel.app">Open the web app</a>
+  <a href="https://multi-class-news-topic-classification.vercel.app/">Open the web app</a>
   &nbsp;·&nbsp;
   <a href="https://github.com/Nowshin-Ara-Nini">GitHub profile</a>
   &nbsp;·&nbsp;
